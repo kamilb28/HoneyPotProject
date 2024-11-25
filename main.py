@@ -3,6 +3,18 @@ import logging
 from logging.handlers import RotatingFileHandler
 import socket
 import paramiko
+import threading
+import signal
+
+SSH_BANNER = "SSH-2.0-HPPServer_1.0"
+
+if not os.path.exists('server.key'):
+    print("Generating server RSA key...")
+    key = paramiko.RSAKey.generate(2048)  # Generate a 2048-bit RSA key
+    key.write_private_key_file('server.key')  # Save to server.key
+    print("Server RSA key generated")
+
+host_key = paramiko.RSAKey(filename='server.key')
 
 log_dir = 'log'
 if not os.path.exists(log_dir):
@@ -89,25 +101,29 @@ def shell(channel, client):
 
 class Server(paramiko.ServerInterface):
     def __init__(self, client_ip, input_username=None, input_password=None):
+        self.event = threading.Event()
         self.client_ip = client_ip
         self.input_username = input_username
         self.input_password = input_password
 
-    def chack_channel_request(self, kind, channel_id):
+    def check_channel_request(self, kind, channel_id):
         if kind == 'session':
             return paramiko.OPEN_SUCCEEDED
+        return paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED
         
-    def get_allowed_auth(self) -> str:
-        return "password"
+    def get_allowed_auths(self, username) -> str:
+        return "admin"
     
     def check_auth_password(self, username: str, password: str) -> int:
         if self.input_username is not None and self.input_password is not None:
-            if username == 'admin' and password == 'admin':
+            if username == self.input_username and password == self.input_password:
                 return paramiko.AUTH_SUCCESSFUL
             else:
                 return paramiko.AUTH_FAILED
+        else:
+            return paramiko.AUTH_SUCCESSFUL
             
-    def check_channel_shell_reuest(self, channel):
+    def check_channel_shell_request(self, channel):
         self.event.set()
         return True
     
@@ -119,5 +135,68 @@ class Server(paramiko.ServerInterface):
         return True
 
 
-def client_handle(aient, adresssm, username, password):
-    pass
+def client_handle(client, adress, username, password):
+    client_ip = adress[0]
+    print(f"{client_ip} connected to server")
+
+    try:
+        transport = paramiko.Transport(client)
+        transport.local_version = SSH_BANNER
+        server = Server(client_ip=client_ip, input_username=username, input_password=password)
+
+        transport.add_server_key(host_key)
+        transport.start_server(server=server)
+
+        channel = transport.accept(10000)
+        if not channel:
+            print("chanel didn't open")
+
+        channel.send("")
+        shell(channel=channel, client=client_ip)
+    except Exception as error:
+        print("Error occured during connection to server")
+        print(error)
+    finally:
+        try:
+            transport.close()
+        except Exception as error:
+            print("Error occured during closing connection to server")
+            print(error)
+
+
+_socket = None  # Declare this globally to access it in signal handlers
+
+def signal_handler(sig, frame):
+    global _socket
+    print("\nReceived termination signal. Closing socket and shutting down the server.")
+    if _socket:
+        try:
+            _socket.close()
+            print("Socket closed successfully.")
+        except Exception as e:
+            print(f"Error while closing socket: {e}")
+    sys.exit(0)
+
+def honeypot(address, port, username, password):
+    global _socket
+    _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    _socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    _socket.bind((address, port))
+
+    _socket.listen(100)
+    print(f"SSH server is listening on port {port}")
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGTSTP, signal_handler)
+
+    while True:
+        try:
+            client, addr = _socket.accept()
+            ssh_thred = threading.Thread(target=client_handle, args=(client, addr, username, password))
+            ssh_thred.start()
+        except Exception as error:
+            print("Error while threading client")
+            print(error)
+
+honeypot('127.0.0.1', 2222, 'admin', 'admin')
