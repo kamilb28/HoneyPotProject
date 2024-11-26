@@ -5,6 +5,7 @@ import socket
 import paramiko
 import threading
 import signal
+import sys
 
 SSH_BANNER = "SSH-2.0-HPPServer_1.0"
 
