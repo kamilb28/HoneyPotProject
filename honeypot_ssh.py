@@ -37,7 +37,7 @@ cmd_log.addHandler(cmd_audit_handler)
 
 mock_file_system = {
     "": ["file1.txt", "file2.txt", "dir1"],
-    "dir": ["file3.txt"],
+    "dir1": ["file3.txt"],
     "file1.txt": "Content of file1",
     "file2.txt": "Content of file2",
     "dir1/file3.txt": "Content of file3",
@@ -187,7 +187,7 @@ def signal_handler(sig, frame):
             print(f"Error while closing socket: {e}")
     sys.exit(0)
 
-def honeypot(address, port, username, password):
+def run(address, port, username, password):
     global _socket
     _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     _socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -208,6 +208,3 @@ def honeypot(address, port, username, password):
         except Exception as error:
             print("Error while threading client")
             print(error)
-
-# honeypot('127.0.0.1', 2222, 'admin', 'admin')
-honeypot('127.0.0.1', 2222, username=None, password=None)
