@@ -23,7 +23,7 @@ def baseline_web_honeypot(input_username="admin", input_password="deeboodah"):
 
     @app.route('/')
     def index():
-        return render_template('template.html')
+        return render_template('index.html')
 
     @app.route('/login', methods=['POST'])
     def login():
@@ -35,9 +35,9 @@ def baseline_web_honeypot(input_username="admin", input_password="deeboodah"):
         log.info(f'Client with IP Address: {ip_address} entered\n Username: {username}, Password: {password}')
 
         if username == input_username and password == input_password:
-            return 'Congrats, you are in'
+            return render_template('success.html', username=username)
         else:
-            return "Invalid username or password, please try again."
+            return render_template('failure.html')
         
     return app
 
